@@ -10,6 +10,9 @@ import { Input } from '../../components/ui/input';
 import { Button } from '../../components/ui/button';
 import { Skeleton } from '../../components/ui/skeleton';
 import {
+  Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
+} from '../../components/ui/select';
+import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
 } from '../../components/ui/table';
 import {
@@ -178,6 +181,7 @@ export default function ScanPage() {
 
   const [search, setSearch] = useState('');
   const [searchParam, setSearchParam] = useState('');
+  const [branch, setBranch] = useState('all');
   const [page, setPage] = useState(1);
   const [sortKey, setSortKey] = useState(null);
   const [sortDir, setSortDir] = useState('asc');
@@ -224,7 +228,15 @@ export default function ScanPage() {
     page,
     page_size: 50,
     ...(searchParam ? { search: searchParam } : {}),
-  }), [page, searchParam]);
+    ...(branch !== 'all' ? { br: branch } : {}),
+  }), [page, searchParam, branch]);
+
+  // Branches for the selector, fetched from GWEB (Br1). "all" = both branches.
+  const { data: branchList = [] } = useQuery({
+    queryKey: ['fn6', 'branches'],
+    queryFn: () => fn6Api.branches().then(r => r.data),
+    staleTime: 5 * 60_000,
+  });
 
   const { data: listRes, isLoading: listLoading } = useQuery({
     queryKey: ['fn6', 'list', listParams],
@@ -354,6 +366,19 @@ export default function ScanPage() {
               )}
             </div>
             <div className="flex gap-2">
+              <Select value={branch} onValueChange={(v) => { setBranch(v); setPage(1); }}>
+                <SelectTrigger className="h-8 w-32 text-sm">
+                  <SelectValue placeholder="Branch" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All branches</SelectItem>
+                  {branchList.map((b) => (
+                    <SelectItem key={b.br} value={String(b.br)}>
+                      {b.brna || `Branch ${b.br}`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <div className="relative">
                 <ScanBarcode size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
                 <Input

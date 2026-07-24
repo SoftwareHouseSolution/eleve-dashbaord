@@ -7,6 +7,9 @@ export const fn6Api = {
   list(params = {}) {
     return api.get('/Sup/api/fn6/', { params });
   },
+  branches() {
+    return api.get('/Sup/api/branches/');
+  },
   getByMco(mco) {
     return api.get(`/Sup/api/fn6/by-mco/${mco}/`);
   },
