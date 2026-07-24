@@ -1,0 +1,68 @@
+<!-- Eleve Inventory Dashboard — paste this into Shopify Page HTML editor -->
+<!-- Replace VERCEL_URL with your actual Vercel deployment URL -->
+
+<style>
+  .eleve-wrap {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 9999;
+    background: #0a0a0a;
+  }
+  .eleve-loader {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    color: #d4a853;
+    font-family: system-ui, sans-serif;
+    font-size: 14px;
+  }
+  .eleve-loader svg {
+    animation: eleve-spin 0.9s linear infinite;
+  }
+  @keyframes eleve-spin {
+    to { transform: rotate(360deg); }
+  }
+  .eleve-frame {
+    width: 100%;
+    height: 100%;
+    border: none;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+  .eleve-frame.loaded {
+    opacity: 1;
+  }
+</style>
+
+<div class="eleve-wrap" id="eleve-wrap">
+  <div class="eleve-loader" id="eleve-loader">
+    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+    </svg>
+    <span>Loading Eleve Dashboard...</span>
+  </div>
+  <iframe
+    id="eleve-frame"
+    class="eleve-frame"
+    src="https://eleve-dashboard-next.vercel.app"
+    title="Eleve Inventory Dashboard"
+    allow="clipboard-write; fullscreen"
+  ></iframe>
+</div>
+
+<script>
+  (function () {
+    var frame = document.getElementById('eleve-frame');
+    var loader = document.getElementById('eleve-loader');
+    frame.addEventListener('load', function () {
+      loader.style.display = 'none';
+      frame.classList.add('loaded');
+    });
+  })();
+</script>
