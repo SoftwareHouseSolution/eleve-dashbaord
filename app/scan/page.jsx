@@ -182,6 +182,7 @@ export default function ScanPage() {
   const [search, setSearch] = useState('');
   const [searchParam, setSearchParam] = useState('');
   const [branch, setBranch] = useState('all');
+  const [karat, setKarat] = useState('all');
   const [page, setPage] = useState(1);
   const [sortKey, setSortKey] = useState(null);
   const [sortDir, setSortDir] = useState('asc');
@@ -229,12 +230,20 @@ export default function ScanPage() {
     page_size: 50,
     ...(searchParam ? { search: searchParam } : {}),
     ...(branch !== 'all' ? { br: branch } : {}),
-  }), [page, searchParam, branch]);
+    ...(karat !== 'all' ? { co: karat } : {}),
+  }), [page, searchParam, branch, karat]);
 
   // Branches for the selector, fetched from GWEB (Br1). "all" = both branches.
   const { data: branchList = [] } = useQuery({
     queryKey: ['fn6', 'branches'],
     queryFn: () => fn6Api.branches().then(r => r.data),
+    staleTime: 5 * 60_000,
+  });
+
+  // Karats present in the catalog, from GWEB. "all" = every karat.
+  const { data: karatList = [] } = useQuery({
+    queryKey: ['fn6', 'karats'],
+    queryFn: () => fn6Api.karats().then(r => r.data),
     staleTime: 5 * 60_000,
   });
 
@@ -375,6 +384,19 @@ export default function ScanPage() {
                   {branchList.map((b) => (
                     <SelectItem key={b.br} value={String(b.br)}>
                       {b.brna || `Branch ${b.br}`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={karat} onValueChange={(v) => { setKarat(v); setPage(1); }}>
+                <SelectTrigger className="h-8 w-28 text-sm">
+                  <SelectValue placeholder="Karat" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All karats</SelectItem>
+                  {karatList.map((k) => (
+                    <SelectItem key={k.co} value={String(k.co)}>
+                      {k.co}K
                     </SelectItem>
                   ))}
                 </SelectContent>

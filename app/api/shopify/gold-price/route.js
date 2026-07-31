@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getPublicApiBaseUrl } from '../../../../lib/publicEnv';
+import { SUPPORTED_KARATS } from '../../../../lib/fn6Price';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -20,12 +21,14 @@ export async function OPTIONS() {
 }
 
 /**
- * GET — returns the live 18K + 21K gold price per gram and USD→EGP rate.
+ * GET — live per-gram gold price for every karat Eleve sells, plus the
+ * USD→EGP rate.
  *
- * Fetches the gold-rate endpoint from Gweb which provides pr18, pr21,
- * and dollar (USD→EGP rate) directly.
+ * `dollar` is echoed alongside `usd_rate` so the payload can be handed
+ * straight to resolveFn6Price()/goldPriceForKarat() without reshaping.
  *
- * Cached 30s. Polled by the theme every 60s for instant updates.
+ * Back-office use only. The storefront must not price from this — it
+ * renders variant.price, kept current by the bulk sync.
  */
 export async function GET() {
   const base = getPublicApiBaseUrl();
@@ -40,23 +43,19 @@ export async function GET() {
     }
     const data = await res.json();
 
-    const pr18 = Number(data.pr18);
-    const pr21 = Number(data.pr21);
     const usdRate = Number(data.dollar) || 1;
+    const round2 = (n) => Math.round(n * 100) / 100;
 
-    if (!Number.isFinite(pr18) || pr18 <= 0) {
-      return json({ error: 'Invalid 18K gold price from Gweb' }, 502);
-    }
-    if (!Number.isFinite(pr21) || pr21 <= 0) {
-      return json({ error: 'Invalid 21K gold price from Gweb' }, 502);
+    const out = { usd_rate: usdRate, dollar: usdRate };
+    for (const karat of SUPPORTED_KARATS) {
+      const value = Number(data[`pr${karat}`]);
+      if (!Number.isFinite(value) || value <= 0) {
+        return json({ error: `Invalid ${karat}K gold price from Gweb` }, 502);
+      }
+      out[`pr${karat}`] = round2(value);
     }
 
-    return json({
-      pr18: Math.round(pr18 * 100) / 100,
-      pr21: Math.round(pr21 * 100) / 100,
-      usd_rate: usdRate,
-      updated_at: data.updated_at || new Date().toISOString(),
-    });
+    return json({ ...out, updated_at: data.updated_at || new Date().toISOString() });
   } catch (err) {
     return json({ error: err.message || 'Internal error' }, 500);
   }

@@ -48,7 +48,7 @@ import {
   variantToOptionPayload,
 } from '../../lib/variantModel';
 import AddSubVariantDialog from './AddSubVariantDialog';
-import { computeFn6Price, roundToNearest5, applyFn6Price18k } from '../../lib/fn6Price18k';
+import { resolveFn6Price } from '../../lib/fn6Price';
 
 const UNSET = '__unset__';
 
@@ -193,9 +193,9 @@ export default function ShopifyVariantsEditor({
     let cancelled = false;
     fetch('/api/shopify/gold-price')
       .then(r => r.json())
-      .then(data => {
-        if (!cancelled) setGoldRate({ pr18: data.pr18, usdRate: data.usd_rate });
-      })
+      // Keep the whole payload — every karat's rate, not just 18K — so each
+      // item can be priced at its own karat.
+      .then(data => { if (!cancelled) setGoldRate(data); })
       .catch(() => {});
     return () => { cancelled = true; };
   }, []);
@@ -211,7 +211,7 @@ export default function ShopifyVariantsEditor({
       try {
         const res = await fn6Api.getByMco(sku);
         if (cancelled) return;
-        const price = applyFn6Price18k(res.data, goldRate.pr18, goldRate.usdRate);
+        const price = resolveFn6Price(res.data, goldRate);
         if (price != null) results[sku] = price;
       } catch { /* skip */ }
     })).then(() => {
@@ -318,7 +318,7 @@ export default function ShopifyVariantsEditor({
     fn6Api
       .getByMco(trimmed)
       .then(res => {
-        const price = applyFn6Price18k(res.data, rate.pr18, rate.usdRate);
+        const price = resolveFn6Price(res.data, rate);
         if (price == null) return;
         setForm(prev => (prev ? { ...prev, price: String(price) } : prev));
       })
@@ -349,7 +349,7 @@ export default function ShopifyVariantsEditor({
       if (goldRate) {
         try {
           const res = await fn6Api.getByMco(mco);
-          const computed = applyFn6Price18k(res.data, goldRate.pr18, goldRate.usdRate);
+          const computed = resolveFn6Price(res.data, goldRate);
           if (computed != null) price = String(computed);
         } catch {
           // keep form.price
@@ -401,7 +401,7 @@ export default function ShopifyVariantsEditor({
           const res = await fn6Api.getByMco(skuCode);
           inventoryPayload = shopifyBinaryInventoryPayload(true);
           if (goldRate) {
-            const computed = applyFn6Price18k(res.data, goldRate.pr18, goldRate.usdRate);
+            const computed = resolveFn6Price(res.data, goldRate);
             if (computed != null) price = String(computed);
           }
         } catch {

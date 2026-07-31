@@ -12,7 +12,15 @@ export const maxDuration = 60;
  * the old per-SKU refresh-price-bulk sweep, which hit Shopify's 2 req/sec
  * limit and silently left SKUs stale under real catalog size.
  *
- * Body: { pr18: string|number, updates: Array<{ mco, price, weight?, prc?, prcus? }> }
+ * Body: {
+ *   rates:   { pr18, pr21, pr24, usd_rate },   // per-karat per-gram rates
+ *   pr18:    string|number,                    // legacy, superseded by rates
+ *   updates: Array<{ mco, price, co, weight?, prc?, prcus? }>
+ * }
+ *
+ * `price` is computed by GWEB (Sup/pricing.py) at each item's own karat —
+ * it is written to variant.price verbatim, never recomputed here. That is
+ * what keeps the dashboard, the storefront and checkout on one number.
  *
  * Uses Shopify's Bulk Operations API (see lib/shopifyBulkPriceSync.js),
  * which runs OUTSIDE the rate limit — this call only starts it and
@@ -27,7 +35,11 @@ export async function POST(request) {
     body = {};
   }
   const updates = Array.isArray(body.updates) ? body.updates : [];
-  const pr18 = body.pr18 != null ? Number(body.pr18) : null;
+  // Prefer the per-karat rate map; fall back to a lone pr18 so an older
+  // GWEB deploy still syncs (18K items keep their audit metafield).
+  const rates = body.rates && typeof body.rates === 'object'
+    ? body.rates
+    : (body.pr18 != null ? { pr18: body.pr18 } : null);
 
   if (updates.length === 0) {
     return NextResponse.json({ started: false, reason: 'no-updates' });
@@ -49,7 +61,7 @@ export async function POST(request) {
       });
     }
 
-    const result = await startBulkPriceSync(domain, token, updates, pr18);
+    const result = await startBulkPriceSync(domain, token, updates, rates);
     return NextResponse.json(result);
   } catch (err) {
     return NextResponse.json({ error: err.message || String(err) }, { status: 502 });

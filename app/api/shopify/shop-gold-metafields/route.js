@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getShopifyToken } from '../../../../lib/shopify';
 import { getPublicApiBaseUrl } from '../../../../lib/publicEnv';
+import { SUPPORTED_KARATS } from '../../../../lib/fn6Price';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -28,15 +29,24 @@ export async function GET() {
 
   const base = getPublicApiBaseUrl();
 
-  let pr18, usdRate, updatedAt;
+  // One shop metafield per karat Eleve sells. KingGold wrote only gweb_pr18
+  // because that store is 18K-only; a 21K or 24K line would be charged at
+  // the 18K rate here if we copied that.
+  const karatRates = {};
+  let usdRate, updatedAt;
   try {
     const rateRes = await fetch(`${base}/Sup/api/gold-rate/`, { cache: 'no-store' });
     if (!rateRes.ok) throw new Error(`Gold-rate fetch failed: ${rateRes.status}`);
     const data = await rateRes.json();
-    pr18 = Number(data.pr18);
     usdRate = Number(data.dollar) || 1;
     updatedAt = data.updated_at || new Date().toISOString();
-    if (!Number.isFinite(pr18) || pr18 <= 0) throw new Error('Invalid pr18 value');
+    for (const karat of SUPPORTED_KARATS) {
+      const value = Number(data[`pr${karat}`]);
+      if (!Number.isFinite(value) || value <= 0) {
+        throw new Error(`Invalid pr${karat} value`);
+      }
+      karatRates[`pr${karat}`] = value;
+    }
   } catch (err) {
     return NextResponse.json({ error: err.message }, { status: 502 });
   }
@@ -54,13 +64,13 @@ export async function GET() {
           query: METAFIELDS_SET_MUTATION,
           variables: {
             metafields: [
-              {
+              ...SUPPORTED_KARATS.map((karat) => ({
                 ownerType: 'SHOP',
                 namespace: 'custom',
-                key: 'gweb_pr18',
+                key: `gweb_pr${karat}`,
                 type: 'number_decimal',
-                value: String(pr18),
-              },
+                value: String(karatRates[`pr${karat}`]),
+              })),
               {
                 ownerType: 'SHOP',
                 namespace: 'custom',
@@ -82,5 +92,5 @@ export async function GET() {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true, pr18, usd_rate: usdRate, updated_at: updatedAt });
+  return NextResponse.json({ ok: true, ...karatRates, usd_rate: usdRate, updated_at: updatedAt });
 }

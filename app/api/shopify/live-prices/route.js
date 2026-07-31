@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getPublicApiBaseUrl } from '../../../../lib/publicEnv';
-import { computeFn6Price, roundToNearest5 } from '../../../../lib/fn6Price18k';
+import { resolveFn6Price, goldPriceForKarat } from '../../../../lib/fn6Price';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -24,12 +24,16 @@ const MAX_SKUS = 50;
 const PER_SKU_TIMEOUT_MS = 2500;
 
 /**
- * GET — batch 18K price lookup for the theme (collection pages, etc).
+ * GET — batch price lookup, one entry per SKU.
  *
- * ?skus=A,B,C (max 50) → fetches the live gold rate once, then fetches each
- * SKU by-mco from Gweb, computes the 18K price via the shared formula, and
- * returns { [sku]: { price, weight, gold_18, prc, prcus } }.
- * Used as a fallback when variant metafields are missing on the storefront.
+ * ?skus=A,B,C (max 50) → fetches each SKU by-mco from GWEB and returns
+ * { [sku]: { price, weight, karat, gold_rate, prc, prcus } }. The price is
+ * GWEB's own (Sup/pricing.py), at the item's own karat — not recomputed here.
+ *
+ * Diagnostic/back-office use. The storefront must NOT price from this: it
+ * renders variant.price, which the bulk sync keeps current. A browser-side
+ * price painted over variant.price is exactly what drifted from the checkout
+ * charge on KingGold and got removed.
  */
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
@@ -45,18 +49,14 @@ export async function GET(request) {
 
   const base = getPublicApiBaseUrl();
 
-  // Fetch gold rate once
-  let pr18 = null;
-  let dollar = null;
+  // Fetch the gold rate once. Kept for the fallback path and for reporting
+  // which per-gram rate applies to each item's karat.
+  let rates = null;
   try {
     const rateRes = await fetch(`${base}/Sup/api/gold-rate/`, { cache: 'no-store' });
-    if (rateRes.ok) {
-      const rateData = await rateRes.json();
-      pr18 = Number(rateData.pr18);
-      dollar = Number(rateData.dollar) || 1;
-    }
+    if (rateRes.ok) rates = await rateRes.json();
   } catch {
-    // continue — each item will have null price
+    // continue — each item falls back to GWEB's own `price` field
   }
 
   const results = {};
@@ -79,19 +79,14 @@ export async function GET(request) {
         return;
       }
       const item = await res.json();
-      const raw = computeFn6Price({
-        pr18,
-        usdRate: dollar,
-        weight: Number(item.go_cr),
-        prc: Number(item.prc),
-        prcus: Number(item.prcus),
-      });
-      const price = roundToNearest5(raw);
+      const price = resolveFn6Price(item, rates);
+      const goldForItem = goldPriceForKarat(rates, item?.co);
       results[sku] = {
         found: true,
         price: price != null ? String(price) : null,
         weight: item?.go_cr != null ? `${Number(item.go_cr).toFixed(2)}g` : null,
-        gold_18: pr18 != null ? Math.round(pr18 * 100) / 100 : null,
+        karat: item?.co != null ? Number(item.co) : null,
+        gold_rate: goldForItem != null ? Math.round(goldForItem * 100) / 100 : null,
         prc: item?.prc != null && item.prc !== '' ? Number(item.prc) : 0,
         prcus: item?.prcus != null && item.prcus !== '' ? Number(item.prcus) : 0,
       };
