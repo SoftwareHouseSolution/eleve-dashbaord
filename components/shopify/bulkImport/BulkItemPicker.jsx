@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertCircle, ImageOff, Loader2, RotateCcw, ScanBarcode } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AlertCircle, ImageOff, Loader2, RotateCcw, ScanBarcode, X } from 'lucide-react';
 import { fn6Api } from '../../../api/fn6';
 import { TYPE_LABELS, TYPE_OPTIONS } from '../../../constants/fn6';
 import { formatFn6Currency } from '../../../lib/fn6ItemFields';
@@ -49,6 +49,8 @@ export default function BulkItemPicker({ listedSkus, rates, selected, onSelectio
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [selectingAll, setSelectingAll] = useState(false);
+  const [selectingCount, setSelectingCount] = useState(0);
+  const cancelSelectAll = useRef(false);
 
   const loadPage = useCallback(async () => {
     setLoading(true);
@@ -117,18 +119,25 @@ export default function BulkItemPicker({ listedSkus, rates, selected, onSelectio
    * each item is still classified before it can be selected.
    */
   const selectAllMatching = async () => {
+    cancelSelectAll.current = false;
     setSelectingAll(true);
+    setSelectingCount(0);
     setError('');
     const next = new Set(selected);
     try {
       let current = 1;
       for (;;) {
+        if (cancelSelectAll.current) break;
         const res = await fn6Api.list({ ...applied, page: current, page_size: SELECT_ALL_PAGE_SIZE });
         const batch = res.data?.results || [];
         for (const item of batch) {
           const classification = classifyItem(item, listedSkus, rates);
           if (isSelectable(classification)) next.add(classification.code);
         }
+        // Publish progress as we go, so ticking a row by hand mid-sweep
+        // isn't silently thrown away when the sweep finishes.
+        setSelectingCount(next.size);
+        onSelectionChange(new Set(next));
         if (next.size >= MAX_BULK_CODES) {
           setError(`Stopped at ${MAX_BULK_CODES} items — run this batch, then select the rest.`);
           break;
@@ -136,7 +145,6 @@ export default function BulkItemPicker({ listedSkus, rates, selected, onSelectio
         if (!res.data?.next) break;
         current += 1;
       }
-      onSelectionChange(next);
     } catch (err) {
       setError(err?.response?.data?.detail || err.message || 'Failed to select all matching items');
     } finally {
@@ -145,7 +153,12 @@ export default function BulkItemPicker({ listedSkus, rates, selected, onSelectio
   };
 
   const lastPage = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const busy = disabled || loading || selectingAll;
+
+  // Only a run in progress locks the rows. A "select all matching" sweep
+  // must NOT — it can take many requests on a big catalog, and locking
+  // every checkbox meanwhile makes single selection impossible.
+  const rowsLocked = disabled;
+  const controlsBusy = disabled || loading || selectingAll;
 
   return (
     <div className="space-y-4">
@@ -163,13 +176,13 @@ export default function BulkItemPicker({ listedSkus, rates, selected, onSelectio
                 onChange={e => setSearch(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') applyFilters(); }}
                 className="pl-9"
-                disabled={busy}
+                disabled={controlsBusy}
               />
             </div>
           </div>
           <div className="w-36">
             <Label className="text-[11px] font-medium text-muted-foreground mb-1 block">Karat</Label>
-            <Select value={karat} onValueChange={setKarat} disabled={busy}>
+            <Select value={karat} onValueChange={setKarat} disabled={controlsBusy}>
               <SelectTrigger><SelectValue placeholder="All" /></SelectTrigger>
               <SelectContent>
                 {TYPE_OPTIONS.filter(o => o.value).map(o => (
@@ -179,11 +192,11 @@ export default function BulkItemPicker({ listedSkus, rates, selected, onSelectio
             </Select>
           </div>
           <div className="flex items-center gap-1.5">
-            <Button size="sm" onClick={applyFilters} disabled={busy} className="gap-1.5">
+            <Button size="sm" onClick={applyFilters} disabled={controlsBusy} className="gap-1.5">
               <ScanBarcode size={13} /> Search
             </Button>
             {(search || karat) && (
-              <Button size="sm" variant="ghost" onClick={clearFilters} disabled={busy} className="gap-1.5 text-muted-foreground">
+              <Button size="sm" variant="ghost" onClick={clearFilters} disabled={controlsBusy} className="gap-1.5 text-muted-foreground">
                 <RotateCcw size={13} /> Clear
               </Button>
             )}
@@ -199,27 +212,39 @@ export default function BulkItemPicker({ listedSkus, rates, selected, onSelectio
       )}
 
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex items-center gap-2 text-sm">
+        <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
           <Checkbox
             checked={allPageSelected}
             onCheckedChange={v => togglePage(Boolean(v))}
-            disabled={busy || selectableOnPage.length === 0}
+            disabled={rowsLocked || selectableOnPage.length === 0}
             aria-label="Select all publishable items on this page"
           />
           <span className="text-muted-foreground">
-            Select page ({selectableOnPage.length} publishable)
+            Select this page ({selectableOnPage.length} publishable)
           </span>
+        </label>
+        <div className="flex items-center gap-2">
+          {selectingAll && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-8 text-xs gap-1 text-muted-foreground"
+              onClick={() => { cancelSelectAll.current = true; }}
+            >
+              <X size={12} /> Cancel
+            </Button>
+          )}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={selectAllMatching}
+            disabled={controlsBusy || total === 0}
+          >
+            {selectingAll
+              ? <><Loader2 size={13} className="animate-spin mr-1.5" />Selecting… {selectingCount}</>
+              : <>Select all {total} matching</>}
+          </Button>
         </div>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={selectAllMatching}
-          disabled={busy || total === 0}
-        >
-          {selectingAll
-            ? <><Loader2 size={13} className="animate-spin mr-1.5" />Selecting…</>
-            : <>Select all {total} matching</>}
-        </Button>
       </div>
 
       <div className="border rounded-xl overflow-hidden">
@@ -247,17 +272,30 @@ export default function BulkItemPicker({ listedSkus, rates, selected, onSelectio
             ) : classified.map(({ item, classification }) => {
               const code = classification.code;
               const selectable = isSelectable(classification);
+              const isSelected = selected.has(code);
+              const rowClickable = selectable && !rowsLocked;
               return (
                 <tr
                   key={code || item.id}
-                  className={`border-t ${selectable ? '' : 'opacity-50'}`}
+                  // The whole row toggles, not just the 16px box — picking
+                  // items one by one is the common case and a tiny target
+                  // makes that miserable.
+                  onClick={rowClickable ? () => toggleOne(code, !isSelected) : undefined}
+                  className={[
+                    'border-t',
+                    selectable ? '' : 'opacity-50',
+                    rowClickable ? 'cursor-pointer hover:bg-muted/40' : '',
+                    isSelected ? 'bg-gold-50 dark:bg-gold-900/20' : '',
+                  ].filter(Boolean).join(' ')}
                 >
                   <td className="p-2 text-center">
                     <Checkbox
-                      checked={selected.has(code)}
+                      checked={isSelected}
                       onCheckedChange={v => toggleOne(code, Boolean(v))}
-                      disabled={busy || !selectable}
+                      onClick={e => e.stopPropagation()}
+                      disabled={rowsLocked || !selectable}
                       aria-label={`Select ${code}`}
+                      className="border-2 border-muted-foreground/50 data-[state=checked]:border-gold-500"
                     />
                   </td>
                   <td className="p-2 font-mono text-xs">{code}</td>
@@ -277,11 +315,11 @@ export default function BulkItemPicker({ listedSkus, rates, selected, onSelectio
 
       {lastPage > 1 && (
         <div className="pagination-bar">
-          <Button size="sm" variant="outline" className="h-8" disabled={busy || page <= 1} onClick={() => setPage(p => p - 1)}>
+          <Button size="sm" variant="outline" className="h-8" disabled={controlsBusy || page <= 1} onClick={() => setPage(p => p - 1)}>
             Prev
           </Button>
           <span className="text-xs text-muted-foreground px-2">Page {page} of {lastPage}</span>
-          <Button size="sm" variant="outline" className="h-8" disabled={busy || page >= lastPage} onClick={() => setPage(p => p + 1)}>
+          <Button size="sm" variant="outline" className="h-8" disabled={controlsBusy || page >= lastPage} onClick={() => setPage(p => p + 1)}>
             Next
           </Button>
         </div>
