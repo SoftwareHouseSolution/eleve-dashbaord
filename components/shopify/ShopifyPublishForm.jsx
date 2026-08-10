@@ -7,6 +7,7 @@ import { Input } from '../ui/input';
 import { formatFn6Weight, shopifyBinaryInventoryPayload } from '../../lib/fn6ItemFields';
 import { formatGwebWeightDisplay } from '../../lib/gwebWeightMetafield';
 import { buildDefaultDescription, buildDefaultSpec, splitBodyHtml } from '../../lib/fn6Spec';
+import { roundToNearest5 } from '../../lib/fn6Price';
 import { getItemImageUrls } from '../../lib/mediaUrl';
 import {
   addShopifyProductImage,
@@ -71,7 +72,10 @@ export default function ShopifyPublishForm({
 
   const itemPrice = useMemo(() => {
     if (item.price == null || item.price === '') return '';
-    return String(Math.round(Number(item.price) / 5) * 5);
+    // Must match Sup/pricing.py's rounding — the bulk import path uses
+    // resolveFn6Price/roundToNearest5, and Math.round(n / 5) * 5 disagrees
+    // with it by 5 EGP on some items.
+    return String(roundToNearest5(Number(item.price)));
   }, [item.price]);
 
   const itemWeightLabel = useMemo(

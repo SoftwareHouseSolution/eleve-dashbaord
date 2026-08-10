@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { ShoppingBag } from 'lucide-react';
 import DashboardShell from '../../components/DashboardShell';
+import BulkImportTab from '../../components/shopify/BulkImportTab';
 import BulkRepairVariantOptionsButton from '../../components/shopify/BulkRepairVariantOptionsButton';
 import CleanupDiscriminatorsButton from '../../components/shopify/CleanupDiscriminatorsButton';
 import ItemsListTab from '../../components/shopify/ItemsListTab';
@@ -15,7 +16,8 @@ export default function ShopifyPage() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const tab = searchParams.get('tab') === 'manage' ? 'manage' : 'list';
+  const rawTab = searchParams.get('tab');
+  const tab = ['manage', 'import'].includes(rawTab) ? rawTab : 'list';
   const sku = searchParams.get('sku') || '';
 
   const setRoute = useMemo(() => (nextTab, nextSku = '') => {
@@ -37,7 +39,8 @@ export default function ShopifyPage() {
                 <h1 className="text-xl font-bold tracking-tight">Shopify Items</h1>
               </div>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Browse products in Items List, then open complete CRUD workflows in Items Management.
+                Browse products in Items List, open complete CRUD workflows in Items Management,
+                or publish many GWEB items at once in Bulk Import.
               </p>
             </div>
             <div className="flex flex-col gap-2">
@@ -55,12 +58,16 @@ export default function ShopifyPage() {
           <TabsList>
             <TabsTrigger value="list">Items List</TabsTrigger>
             <TabsTrigger value="manage">Items Management</TabsTrigger>
+            <TabsTrigger value="import">Bulk Import</TabsTrigger>
           </TabsList>
           <TabsContent value="list" className="pt-3">
             <ItemsListTab onManageSku={(nextSku) => setRoute('manage', nextSku || '')} />
           </TabsContent>
           <TabsContent value="manage" className="pt-3">
             <ItemsManagementTab initialSku={sku} />
+          </TabsContent>
+          <TabsContent value="import" className="pt-3">
+            <BulkImportTab />
           </TabsContent>
         </Tabs>
       </div>

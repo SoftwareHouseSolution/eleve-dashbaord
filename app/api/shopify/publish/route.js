@@ -1,124 +1,20 @@
 import { NextResponse } from 'next/server';
-import { refreshVariantPrice } from '../../../../lib/refreshVariantPrice';
 import { getShopifyToken } from '../../../../lib/shopify';
-import {
-  applyVariantInventoryFromBody,
-  parseInventoryQuantityFromBody,
-  restVariantInventoryFields,
-} from '../../../../lib/shopifyInventory';
+import { publishProductToShopify } from '../../../../lib/publishFn6Item';
 
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { title, body_html, product_type, price, sku, images, vendor, tags, collectionIds } = body;
     const { token, domain } = await getShopifyToken();
 
-    const priceNum = Number(price);
-    if (!Number.isFinite(priceNum) || priceNum <= 0) {
-      // Never publish a product with an invalid/zero price — this is the
-      // exact defect that let a variant go live sellable at 0 EGP.
-      return NextResponse.json(
-        { error: `Cannot publish: invalid price "${price}"` },
-        { status: 400 },
-      );
-    }
-
-    const inventoryQty = parseInventoryQuantityFromBody(body);
-    const variantFields = {
-      price: priceNum.toFixed(2),
-      sku: String(sku),
-      ...(inventoryQty != null
-        ? restVariantInventoryFields(inventoryQty)
-        : { inventory_management: null }),
-    };
-
-    const product = {
-      product: {
-        title,
-        body_html,
-        vendor: vendor || 'Eleve',
-        tags: tags || '',
-        product_type: product_type || 'Gold Jewelry',
-        status: 'active',
-        variants: [variantFields],
-        images: (images || []),
-      },
-    };
-
-    const res = await fetch(`https://${domain}/admin/api/2024-10/products.json`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Shopify-Access-Token': token,
-      },
-      body: JSON.stringify(product),
-    });
-
-    const data = await res.json();
-
-    if (!res.ok) {
-      const errMsg = typeof data.errors === 'object' ? JSON.stringify(data.errors) : (data.errors || 'Shopify API error');
-      return NextResponse.json({ error: errMsg }, { status: res.status });
-    }
-
-    const createdVariant = data.product?.variants?.[0];
-    if (createdVariant?.id) {
-      try {
-        await applyVariantInventoryFromBody(domain, token, body, createdVariant.id);
-      } catch (inventoryErr) {
-        return NextResponse.json(
-          { error: `Product published but inventory sync failed: ${inventoryErr.message}` },
-          { status: 502 },
-        );
-      }
-    }
-
-    if (sku) {
-      try {
-        await refreshVariantPrice(String(sku));
-      } catch (e) {
-        // publish succeeded; live GWEB sync is best-effort, but log so a
-        // stale-price product doesn't fail silently.
-        console.error(`[publish] post-publish price refresh failed for ${sku}:`, e?.message || e);
-      }
-    }
-
-    const collectWarnings = [];
-    const productId = data.product?.id;
-    if (productId && Array.isArray(collectionIds) && collectionIds.length > 0) {
-      for (const collectionId of collectionIds) {
-        const cid = Number(collectionId);
-        if (!cid) continue;
-        try {
-          const collectRes = await fetch(`https://${domain}/admin/api/2024-10/collects.json`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-Shopify-Access-Token': token,
-            },
-            body: JSON.stringify({
-              collect: { product_id: productId, collection_id: cid },
-            }),
-          });
-          if (!collectRes.ok) {
-            const collectData = await collectRes.json().catch(() => ({}));
-            const errMsg = typeof collectData.errors === 'object'
-              ? JSON.stringify(collectData.errors)
-              : (collectData.errors || `HTTP ${collectRes.status}`);
-            collectWarnings.push(`collection ${cid}: ${errMsg}`);
-          }
-        } catch (collectErr) {
-          collectWarnings.push(`collection ${cid}: ${collectErr.message}`);
-        }
-      }
-    }
+    const { product, shopUrl, collectWarnings } = await publishProductToShopify(domain, token, body);
 
     return NextResponse.json({
-      product: data.product,
-      shopUrl: `https://${domain}/products/${data.product.handle}`,
+      product,
+      shopUrl,
       ...(collectWarnings.length > 0 ? { collectWarnings } : {}),
     });
   } catch (err) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({ error: err.message }, { status: err.status || 500 });
   }
 }
