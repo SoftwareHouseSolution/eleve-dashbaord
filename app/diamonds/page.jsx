@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, ChevronDown, ChevronRight, Gem, Loader2, Upload, X } from 'lucide-react';
 import DashboardShell from '../../components/DashboardShell';
 import DiamondPicker from '../../components/diamonds/DiamondPicker';
+import DiamondBrowse from '../../components/diamonds/DiamondBrowse';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import BulkRunPanel from '../../components/shopify/bulkImport/BulkRunPanel';
 import ProductOrganization from '../../components/shopify/ProductOrganization';
 import { Button } from '../../components/ui/button';
@@ -126,7 +128,7 @@ export default function DiamondsPage() {
             <h1 className="text-xl font-bold tracking-tight">Diamonds</h1>
           </div>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Publish GWEB diamonds to Shopify by code. Price is the GWEB selling price (USD × dollar rate)
+            Browse GWEB diamond stock or look diamonds up by code, then publish to Shopify. Price is the GWEB selling price (USD × dollar rate)
             and updates on its own whenever GWEB's gold or dollar rate changes.
           </p>
           <div className="flex items-center gap-2 mt-2">
@@ -161,12 +163,28 @@ export default function DiamondsPage() {
                 Checking which diamonds are already on Shopify…
               </div>
             ) : (
-              <DiamondPicker
-                listedSkus={listedSkus}
-                selected={selected}
-                onSelectionChange={setSelected}
-                disabled={running}
-              />
+              <Tabs defaultValue="browse" className="w-full !flex !flex-col">
+                <TabsList>
+                  <TabsTrigger value="browse">Browse stock</TabsTrigger>
+                  <TabsTrigger value="codes">By code</TabsTrigger>
+                </TabsList>
+                <TabsContent value="browse" className="pt-3">
+                  <DiamondBrowse
+                    listedSkus={listedSkus}
+                    selected={selected}
+                    onSelectionChange={setSelected}
+                    disabled={running}
+                  />
+                </TabsContent>
+                <TabsContent value="codes" className="pt-3">
+                  <DiamondPicker
+                    listedSkus={listedSkus}
+                    selected={selected}
+                    onSelectionChange={setSelected}
+                    disabled={running}
+                  />
+                </TabsContent>
+              </Tabs>
             )}
 
             <div className="border rounded-xl bg-card">
