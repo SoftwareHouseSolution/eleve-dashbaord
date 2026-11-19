@@ -121,7 +121,22 @@ async function fetchPrimaryLocation(token) {
   return active;
 }
 
+// Diamond SKUs are "D-<zco>" (GWEB Stone.Ft5), read through GWEB's existing
+// /Stone/api/ft5/by-zco/ lookup. It returns sold diamonds too, with qt
+// (quantity) 0 — so qt drives availability like gold's qt does.
+async function fetchGwebDiamondQty(sku) {
+  const zco = String(sku).trim().slice(2);
+  const url = `${GWEB_BASE}/Stone/api/ft5/by-zco/${encodeURIComponent(zco)}/`;
+  const res = await fetch(url);
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`gweb ${res.status}`);
+  const data = await res.json();
+  const qty = Number(data?.qt);
+  return Number.isFinite(qty) ? qty : null;
+}
+
 async function fetchGwebQty(sku) {
+  if (/^D-/i.test(String(sku).trim())) return fetchGwebDiamondQty(sku);
   const url = `${GWEB_BASE}/Sup/api/fn6/by-mco/${encodeURIComponent(sku)}/`;
   const res = await fetch(url);
   if (res.status === 404) return null;
@@ -230,9 +245,10 @@ async function main() {
         continue;
       }
 
-      const invItem = v.tracked
-        ? null
-        : await fetchInventoryItemIdForVariant(token, variantGid(v.variantId));
+      // Always look up the inventory item — setOnHand needs its id even when
+      // the variant is already tracked (previously null -> every tracked
+      // variant errored with "no inventoryItem id").
+      const invItem = await fetchInventoryItemIdForVariant(token, variantGid(v.variantId));
 
       if (!v.tracked) {
         if (!invItem?.id) {
@@ -241,14 +257,8 @@ async function main() {
           await sleep(THROTTLE_MS);
           continue;
         }
-        await ensureTracked(token, invItem.id, false);
+        await ensureTracked(token, invItem.id, invItem.tracked);
         summary.enableTracking += 1;
-        if (!invItem.tracked) {
-          summary.errors.push({ sku: v.sku, error: 'failed to enable tracking' });
-          log(`  ${label} ERROR: failed to enable tracking`);
-          await sleep(THROTTLE_MS);
-          continue;
-        }
       }
 
       const finalInvItemId = invItem?.id || null;

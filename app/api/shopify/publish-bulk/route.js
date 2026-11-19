@@ -5,6 +5,8 @@ import { fetchGoldRateSnapshot } from '../../../../lib/goldRates';
 import { findShopifyVariantBySkuOnly } from '../../../../lib/shopifyProductLookup';
 import { publishProductToShopify } from '../../../../lib/publishFn6Item';
 import { BULK_CHUNK_SIZE, buildBulkPublishBody } from '../../../../lib/bulkImport';
+import { isDiamondSku, buildDiamondPublishBody } from '../../../../lib/diamond';
+import { fetchDiamondBySku } from '../../../../lib/diamondServer';
 
 /**
  * Publish one chunk of GWEB items to Shopify.
@@ -42,12 +44,19 @@ async function publishOne(domain, token, code, rates, defaults) {
       return { mco, outcome: 'skipped', reason: 'Already on Shopify', warnings: [] };
     }
 
-    const { item } = await fetchFn6ByMco(mco);
+    // "D-<zco>" codes are diamonds (Stone.Ft5); everything else is gold Fn6.
+    const diamond = isDiamondSku(mco);
+    const { item } = diamond ? await fetchDiamondBySku(mco) : await fetchFn6ByMco(mco);
     if (!item) {
       return { mco, outcome: 'failed', reason: 'Not found in GWEB', warnings: [] };
     }
+    if (diamond && !item.available) {
+      return { mco, outcome: 'failed', reason: 'Sold / out of stock in GWEB', warnings: [] };
+    }
 
-    const body = buildBulkPublishBody(item, rates, defaults);
+    const body = diamond
+      ? buildDiamondPublishBody(item, defaults)
+      : buildBulkPublishBody(item, rates, defaults);
     const warnings = body.images.length === 0 ? ['No photos — add them later'] : [];
 
     const { product, shopUrl, collectWarnings } = await publishProductToShopify(domain, token, body);

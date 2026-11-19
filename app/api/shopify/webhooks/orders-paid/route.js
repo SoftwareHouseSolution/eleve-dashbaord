@@ -12,6 +12,26 @@ import { fetchGoldRateSnapshotAt } from '../../../../../lib/goldRates';
 import { upsertOrderSnapshotMetafields } from '../../../../../lib/shopifyOrderHistory';
 import { recordWebhookReceipt } from '../../../../../lib/webhookReceipts.js';
 import { refreshVariantPrice } from '../../../../../lib/refreshVariantPrice';
+import { setVariantAvailability } from '../../../../../lib/codeChainService';
+import { isDiamondSku } from '../../../../../lib/diamond';
+
+/**
+ * A diamond is a single unique piece — no code chain to advance. When it is
+ * paid for, set its variant to unavailable (qty 0) and move the product to
+ * draft so it disappears from the storefront. Gold keeps its chain logic.
+ */
+async function markDiamondSold(domain, token, productId, variantId) {
+  if (variantId) await setVariantAvailability(domain, token, String(variantId), false);
+  const res = await fetch(`https://${domain}/admin/api/2024-10/products/${productId}.json`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': token },
+    body: JSON.stringify({ product: { id: Number(productId), status: 'draft' } }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(typeof data.errors === 'object' ? JSON.stringify(data.errors) : (data.errors || 'Failed to unpublish diamond'));
+  }
+}
 
 export const maxDuration = 60;
 
@@ -178,6 +198,19 @@ export async function POST(request) {
       const productId = line.product_id;
       const sku = line.sku;
       if (!productId || !sku) continue;
+
+      if (isDiamondSku(sku)) {
+        try {
+          await markDiamondSold(domain, token, String(productId), line.variant_id);
+          lineIds.add(lineId);
+          processedAny = true;
+          results.push({ lineId, diamond: true, soldCode: sku, unpublished: true });
+        } catch (err) {
+          results.push({ lineId, diamond: true, error: err.message });
+        }
+        await sleep(LINE_ITEM_DELAY_MS);
+        continue;
+      }
 
       try {
         const result = await processOrderLineForChains(

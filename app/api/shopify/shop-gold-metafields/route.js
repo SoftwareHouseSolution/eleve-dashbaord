@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getShopifyToken } from '../../../../lib/shopify';
 import { getPublicApiBaseUrl } from '../../../../lib/publicEnv';
 import { SUPPORTED_KARATS } from '../../../../lib/fn6Price';
+import { repriceListedDiamonds } from '../../../../lib/diamondReprice';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -92,5 +93,12 @@ export async function GET() {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true, ...karatRates, usd_rate: usdRate, updated_at: updatedAt });
+  // GWEB calls this route on every gold AND dollar rate change, so it is
+  // also where diamonds get repriced (their price = s_totus x USD). Started
+  // in the background and not awaited: GWEB waits only 10s for this call,
+  // and the dashboard runs as a long-lived Node server on Dokploy, so the
+  // job keeps going after the response is sent.
+  repriceListedDiamonds().catch((err) => console.error('[diamond-reprice] failed:', err));
+
+  return NextResponse.json({ ok: true, ...karatRates, usd_rate: usdRate, updated_at: updatedAt, diamondReprice: 'started' });
 }

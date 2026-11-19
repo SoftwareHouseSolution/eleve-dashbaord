@@ -9,6 +9,7 @@ import {
   Layers,
   ScanBarcode,
   ShoppingBag,
+  Gem,
   History,
   ChevronLeft,
   ChevronRight,
@@ -25,6 +26,7 @@ import {
 const NAV = [
   { label: 'Dashboard', path: '/scan', icon: ScanBarcode },
   { label: 'Shopify', path: '/shopify', icon: ShoppingBag },
+  { label: 'Diamonds', path: '/diamonds', icon: Gem },
   { label: 'History', path: '/history', icon: History },
 ];
 

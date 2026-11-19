@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import DashboardShell from '../../components/DashboardShell';
 import { fn6Api } from '../../api/fn6';
+import { diamondsApi } from '../../api/diamonds';
+import { isDiamondSku, diamondZcoFromSku, formatCarat } from '../../lib/diamond';
 import { TYPE_LABELS, TYPE_COLORS } from '../../constants/fn6';
 import { Input } from '../../components/ui/input';
 import { Button } from '../../components/ui/button';
@@ -99,6 +101,40 @@ function ScanResult({ item }) {
 
       <div className="scan-result-actions">
         <Link href={`/shopify?tab=manage&sku=${encodeURIComponent(String(item.mco))}`}>
+          <Button variant="outline" size="sm">
+            <Settings size={14} className="mr-1" />
+            Manage on Shopify
+          </Button>
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+function DiamondScanResult({ item }) {
+  const sku = item.sku || `D-${item.zco}`;
+  return (
+    <div className="scan-result animate-fadeIn">
+      <div className="scan-result-header">
+        <div className="scan-result-code">
+          <code>{sku}</code>
+          <span className="type-badge">Diamond</span>
+          {!item.available && <span className="type-badge">Sold</span>}
+        </div>
+        {item.zdis && <p className="scan-result-name">{item.zdis}</p>}
+      </div>
+      <div className="scan-fields-grid">
+        <Field label="Carat" value={formatCarat(item.carat) || DASH} />
+        <Field label="Shape" value={item.shape || DASH} />
+        <Field label="Color" value={item.color || DASH} />
+        <Field label="Clarity" value={item.clarity || DASH} />
+        <Field label="Cut" value={item.cut || DASH} />
+        <Field label="Quantity" value={item.qty} />
+        <Field label="Price (USD)" value={item.s_totus != null ? `$${Number(item.s_totus).toLocaleString('en-US')}` : DASH} />
+        <Field label="Total Price" value={item.price != null ? formatFn6Currency(item.price) : DASH} />
+      </div>
+      <div className="scan-result-actions">
+        <Link href={`/shopify?tab=manage&sku=${encodeURIComponent(sku)}`}>
           <Button variant="outline" size="sm">
             <Settings size={14} className="mr-1" />
             Manage on Shopify
@@ -205,6 +241,23 @@ export default function ScanPage() {
     setResult(null);
     setSoldInfo(null);
     setLoading(true);
+    if (isDiamondSku(mco)) {
+      // Diamond codes are typed/scanned as "D-<zco>". The endpoint only
+      // returns diamonds still for sale, so a 404 means sold or not listed.
+      try {
+        const res = await diamondsApi.getByZco(diamondZcoFromSku(mco));
+        setResult({ ...res.data, isDiamond: true });
+      } catch (err) {
+        setError(err?.response?.status === 404
+          ? 'Diamond code not found in GWEB'
+          : (err?.response?.data?.detail || err?.message || 'Diamond not found'));
+      } finally {
+        setLoading(false);
+        inputRef.current?.focus();
+        inputRef.current?.select();
+      }
+      return;
+    }
     try {
       const res = await fn6Api.getByMco(mco);
       setResult(res.data);
@@ -362,7 +415,8 @@ export default function ScanPage() {
             </div>
           )}
 
-          {result && !loading && (soldInfo?.sold
+          {result && !loading && result.isDiamond && <DiamondScanResult key={`d-${result.zco}`} item={result} />}
+          {result && !loading && !result.isDiamond && (soldInfo?.sold
             ? <SoldResult key={`sold-${result.mco}`} item={result} soldInfo={soldInfo} />
             : <ScanResult key={result.mco} item={result} />)}
         </div>
