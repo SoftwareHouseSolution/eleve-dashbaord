@@ -124,11 +124,11 @@ function DiamondScanResult({ item }) {
         {item.zdis && <p className="scan-result-name">{item.zdis}</p>}
       </div>
       <div className="scan-fields-grid">
-        <Field label="Carat" value={formatCarat(item.carat) || DASH} />
-        <Field label="Shape" value={item.shape || DASH} />
-        <Field label="Color" value={item.color || DASH} />
-        <Field label="Clarity" value={item.clarity || DASH} />
-        <Field label="Cut" value={item.cut || DASH} />
+        <Field label="Gold Weight" value={item.goldWeight != null ? `${Number(item.goldWeight).toFixed(2)} g` : DASH} />
+        <Field label="Karat" value={item.karat != null ? `${item.karat}K` : DASH} />
+        <Field label="Stones" value={item.stoneCount || DASH} />
+        <Field label="Total Carat" value={formatCarat(item.carat) || DASH} />
+        <Field label="Main Stone" value={[item.shape, item.color, item.clarity].filter(Boolean).join(' · ') || DASH} />
         <Field label="Quantity" value={item.qty} />
         <Field label="Price (USD)" value={item.s_totus != null ? `$${Number(item.s_totus).toLocaleString('en-US')}` : DASH} />
         <Field label="Total Price" value={item.price != null ? formatFn6Currency(item.price) : DASH} />

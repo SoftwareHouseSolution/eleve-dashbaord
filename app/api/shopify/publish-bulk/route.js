@@ -44,7 +44,7 @@ async function publishOne(domain, token, code, rates, defaults) {
       return { mco, outcome: 'skipped', reason: 'Already on Shopify', warnings: [] };
     }
 
-    // "D-<zco>" codes are diamonds (Stone.Ft5); everything else is gold Fn6.
+    // "D-<zco>" codes are diamonds (Dim.Fd2); everything else is gold Fn6.
     const diamond = isDiamondSku(mco);
     const { item } = diamond ? await fetchDiamondBySku(mco) : await fetchFn6ByMco(mco);
     if (!item) {

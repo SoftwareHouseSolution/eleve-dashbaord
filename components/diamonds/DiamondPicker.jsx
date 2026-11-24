@@ -24,7 +24,7 @@ function StatusBadge({ row }) {
 /**
  * GWEB has no diamond list endpoint (and GWEB is not being changed), so
  * diamonds are picked by code: paste or scan codes, each one is looked up
- * in GWEB's existing /Stone/api/ft5/by-zco/, then select what to publish.
+ * in GWEB's existing /Dim/api/fd2/by-code/, then select what to publish.
  */
 export default function DiamondPicker({ listedSkus, selected, onSelectionChange, disabled }) {
   const [text, setText] = useState('');

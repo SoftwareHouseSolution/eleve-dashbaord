@@ -23,7 +23,7 @@ function StatusBadge({ c }) {
 }
 
 /**
- * GWEB diamond stock (/Stone/api/ft5/) — the diamond version of the gold
+ * GWEB diamond stock (/Dim/api/fd2/) — the diamond version of the gold
  * BulkItemPicker: search, pages, select a page or everything matching.
  */
 export default function DiamondBrowse({ listedSkus, selected, onSelectionChange, disabled }) {
@@ -47,7 +47,7 @@ export default function DiamondBrowse({ listedSkus, selected, onSelectionChange,
       setTotal(Number(res.data.count) || 0);
     } catch (err) {
       setError(err?.response?.status === 404
-        ? 'GWEB diamond list not available — deploy the GWEB update (/Stone/api/ft5/).'
+        ? 'The diamond stock list isn’t on the GWEB server yet. Use the “By code” tab for now.'
         : (err?.response?.data?.detail || err.message || 'Failed to load diamonds'));
       setRows([]);
     } finally {
@@ -121,7 +121,7 @@ export default function DiamondBrowse({ listedSkus, selected, onSelectionChange,
         <div className="flex items-end gap-3 flex-wrap">
           <div className="flex-1 min-w-[180px]">
             <Label className="text-[11px] font-medium text-muted-foreground mb-1 block">
-              Search code, name, shape or certificate
+              Search code or name
             </Label>
             <div className="relative">
               <ScanBarcode size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />

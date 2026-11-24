@@ -121,16 +121,18 @@ async function fetchPrimaryLocation(token) {
   return active;
 }
 
-// Diamond SKUs are "D-<zco>" (GWEB Stone.Ft5), read through GWEB's existing
-// /Stone/api/ft5/by-zco/ lookup. It returns sold diamonds too, with qt
-// (quantity) 0 — so qt drives availability like gold's qt does.
+// Diamond SKUs are "D-<code>" (GWEB Dim.Fd2, diamond jewelry), read through
+// GWEB's existing /Dim/api/fd2/by-code/ lookup. It returns sold pieces too,
+// with qt 0 — so qt drives availability like gold's qt does. An unknown
+// code comes back 200 with an empty code -> skip.
 async function fetchGwebDiamondQty(sku) {
   const zco = String(sku).trim().slice(2);
-  const url = `${GWEB_BASE}/Stone/api/ft5/by-zco/${encodeURIComponent(zco)}/`;
+  const url = `${GWEB_BASE}/Dim/api/fd2/by-code/${encodeURIComponent(zco)}/`;
   const res = await fetch(url);
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`gweb ${res.status}`);
   const data = await res.json();
+  if (!data?.code) return null;
   const qty = Number(data?.qt);
   return Number.isFinite(qty) ? qty : null;
 }
